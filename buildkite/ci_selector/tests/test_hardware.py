@@ -10,6 +10,7 @@ lands here loudly instead of silently having no family.
 import subprocess
 
 import pytest
+import regex as re
 from ci_selector.codemap import hardware
 from ci_selector.codemap.pipeline.buildkite import load_pipeline_configs, load_steps
 from ci_selector.codemap.pipeline.step import LoadReport
@@ -130,6 +131,49 @@ def test_rocm_basename_is_amd_exclusive():
         == "amd"
     )
     assert hardware.exclusive_family_of_path("vllm/attention/ops/aiter_mla.py") is None
+
+
+def test_vendor_model_folders_are_exclusive_to_their_family():
+    """`vllm/models/<model>/<vendor>/` runs only on its vendor; the model's
+    shared files and `common/` do not."""
+    for path, family in (
+        ("vllm/models/kimi_k3/amd/specialized_decode/runtime/decode.py", "amd"),
+        ("vllm/models/kimi_k3/nvidia/model.py", "cuda"),
+        ("vllm/models/deepseek_v4/xpu/model.py", "xpu"),
+        ("vllm/models/kimi_k3/common/layers.py", None),
+        ("vllm/models/kimi_k3/__init__.py", None),
+        ("vllm/models/common/ops/fused_qk_rmsnorm.py", None),
+        ("tests/models/kimi_k3/amd/test_numerics.py", "amd"),
+        ("tests/models/kimi_k3/amd_specialized_decode/test_runtime.py", "amd"),
+        ("tests/models/kimi_k3/nvidia/specialized_decode/test_kda.py", "cuda"),
+        ("tests/models/kimi_k3/test_kda.py", None),
+        ("tests/models/kimi_k3/amdx/test_kda.py", None),
+    ):
+        assert hardware.exclusive_family_of_path(path) == family, path
+
+
+@pytest.mark.drift
+def test_exclusive_path_patterns_still_match_files_at_head(vllm_repo):
+    """Anti-vacuity for the pattern half of the subtractive table. Only the
+    source folders: per-vendor test folders are younger than the pin."""
+    from ci_selector.handwritten import EXCLUSIVE_PATH_PATTERNS
+
+    files = [
+        p.relative_to(vllm_repo).as_posix()
+        for p in (vllm_repo / "vllm" / "models").rglob("*.py")
+    ]
+    dead = [
+        (pattern, family)
+        for pattern, family in EXCLUSIVE_PATH_PATTERNS
+        if pattern.startswith("vllm/") and not any(re.match(pattern, f) for f in files)
+    ]
+    assert not dead, drift_message(
+        f"EXCLUSIVE_PATH_PATTERNS entries match no file at HEAD: {dead}",
+        "A pattern matching nothing scopes nothing, so those folders go back "
+        "to running on every platform.",
+        f"vLLM renamed the vendor folders: update EXCLUSIVE_PATH_PATTERNS in {HW}",
+        f"the vendor folders are gone: delete the entry from {HW}",
+    )
 
 
 def test_family_of_device_spot_checks():

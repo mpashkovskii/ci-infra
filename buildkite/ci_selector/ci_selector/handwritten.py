@@ -163,7 +163,6 @@ EXCLUSIVE_NAMESPACES: tuple[tuple[tuple[str, ...], tuple[str, ...], str], ...] =
         (
             "vllm/v1/worker/xpu",
             "vllm/lora/ops/xpu_ops/",
-            "vllm/models/deepseek_v4/xpu/",
         ),
         (
             "vllm/platforms/xpu.py",
@@ -184,6 +183,22 @@ EXCLUSIVE_NAMESPACES: tuple[tuple[tuple[str, ...], tuple[str, ...], str], ...] =
         ),
         "xpu",
     ),
+)
+
+# Per-vendor model folders (vLLM RFC #42770): `vllm/models/<model>/<vendor>/`
+# is one vendor's implementation of a model, which the model package imports
+# only on that vendor's platform, and `tests/models/<model>/<vendor>[_*]/`
+# holds its tests. Patterns, since every new model adds folders. SUBTRACTIVE
+# like EXCLUSIVE_NAMESPACES, with the same fail-open: a file imported at module
+# level from outside its family keeps every family's jobs, and a step that
+# collects a test file directly keeps it.
+# Update when: vLLM adds a vendor folder name for another family.
+EXCLUSIVE_PATH_PATTERNS: tuple[tuple[str, str], ...] = (
+    (r"vllm/models/[^/]+/amd/", "amd"),
+    (r"vllm/models/[^/]+/nvidia/", "cuda"),
+    (r"vllm/models/[^/]+/xpu/", "xpu"),
+    (r"tests/models/[^/]+/amd(_[^/]+)?/", "amd"),
+    (r"tests/models/[^/]+/nvidia(_[^/]+)?/", "cuda"),
 )
 
 # Cross-family imports at module level that a runtime check really does guard:

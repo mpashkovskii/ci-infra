@@ -27,6 +27,9 @@ from ..handwritten import (
     EXCLUSIVE_NAMESPACES as _EXCLUSIVE_NAMESPACES,
 )
 from ..handwritten import (
+    EXCLUSIVE_PATH_PATTERNS as _EXCLUSIVE_PATH_PATTERNS,
+)
+from ..handwritten import (
     FAMILY_DEVICE_EXACT as _FAMILY_DEVICE_EXACT,
 )
 from ..handwritten import (
@@ -47,6 +50,9 @@ from ..handwritten import (
 
 BASENAME_TOKEN_EXTENSIONS: tuple[str, ...] = (".py", ".sh")
 AMD_BASENAME_TOKEN = "rocm"
+_EXCLUSIVE_PATH_RES = tuple(
+    (re.compile(pattern), family) for pattern, family in _EXCLUSIVE_PATH_PATTERNS
+)
 
 
 def family_of_device(device: str | None) -> str | None:
@@ -180,6 +186,9 @@ def exclusive_family_of_path(path: str) -> str | None:
     """The single family allowed to run `path`, or None if unrestricted."""
     for prefixes, exact, family in _EXCLUSIVE_NAMESPACES:
         if path.startswith(prefixes) or path in exact:
+            return family
+    for pattern, family in _EXCLUSIVE_PATH_RES:
+        if pattern.match(path):
             return family
     if (
         path.endswith(BASENAME_TOKEN_EXTENSIONS)

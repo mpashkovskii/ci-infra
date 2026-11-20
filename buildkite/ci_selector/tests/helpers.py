@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import dataclasses
 
+from ci_selector.codemap import hardware
 from ci_selector.codemap.classify import select
 from ci_selector.codemap.graph.build import FullGraph
 from ci_selector.codemap.graph.demote import (
@@ -22,6 +23,7 @@ from ci_selector.codemap.graph.demote import (
 )
 from ci_selector.codemap.pipeline.step import Step
 from ci_selector.codemap.repo import is_test_basename
+from ci_selector.codemap.selection import _directly_collects
 from ci_selector.codemap.state import RepoState
 
 
@@ -70,8 +72,24 @@ def key_selection_gaps(
         for sid in sorted(steps):
             if sid in sel.selected or sid.split(":", 1)[0] in sel.run_all:
                 continue
+            if _hardware_excludes(state, member, sid):
+                continue
             gaps.append((member, sid))
     return gaps, unrouted, checked
+
+
+def _hardware_excludes(state: RepoState, member: str, step_id: str) -> bool:
+    """The subtraction selection applies: a step on another hardware family
+    cannot run `member` unless its own command collects it."""
+    if member in state.exclusive_disabled:
+        return False
+    for p in state.pipelines:
+        for s in p.steps:
+            if s.step_id == step_id:
+                return hardware.device_excluded_for_path(
+                    member, s.device, s
+                ) and not _directly_collects(p.targets.get(step_id), member)
+    return False
 
 
 def fanout_dropped_literals(
